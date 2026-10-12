@@ -646,7 +646,25 @@ a.row { text-decoration: none; color: inherit; }
     border: 0; border-radius: 0;
   }
 }
-  </style>
+  /* 구매/신청 */
+.shop-hero { font-size: 54px; text-align: center; margin: 6px 0 4px; }
+.shop-detail .d-title, .shop-done .d-title, .shop-done > p { text-align: center; }
+.shop-price { text-align: center; font-size: 22px; font-weight: 800; color: var(--orange); margin-top: 4px; }
+.qty { display: flex; align-items: center; gap: 8px; }
+.qty button { width: 44px; height: 44px; border-radius: 12px; border: 1px solid #eadfd6; background: #fff; font-size: 22px; cursor: pointer; }
+.qty input { width: 70px; text-align: center; font-size: 18px; font-weight: 700; }
+.shop-total .d-v b { color: var(--orange); font-size: 16px; }
+.shop-pay .chip { padding: 10px 14px; }
+.st-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 4px; vertical-align: middle; }
+.st-received { background: #fff1e8; color: var(--orange); }
+.st-processing { background: #e8f1ff; color: #1f5fbf; }
+.st-done { background: #e7f6ec; color: #1f7a42; }
+.st-line { display: flex; justify-content: space-between; gap: 6px; }
+.st-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12.5px; color: #9a8f86; }
+.st-step .st-dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #eee6df; font-weight: 800; }
+.st-step.on { color: #222; font-weight: 700; }
+.st-step.on .st-dot { background: var(--orange); color: #fff; }
+</style>
 </head>
 <body>
   <div class="device">
@@ -2813,6 +2831,7 @@ function back() {
     "sanjae-item": found && found.step < 0 ? "sanjae-docs" : "sanjae-step",
     "dir-list": "directory", "dir-detail": "directory",
     "emergency-call": "emergency", "emg-info": "emergency", expert: "matching",
+    "shop-list": "shop", "shop-item": "shop-list", "shop-form": "shop-item", "shop-checkout": "shop-form", "shop-done": "shop", "shop-orders": "shop", "shop-order": "shop-orders",
   }[s];
   if (found && found.step >= 0) state.sjStep = found.step;
   if (parent) { state.screen = parent; render(); scrollTop0(); return; }
@@ -3249,7 +3268,7 @@ function viewHome() {
         <div class="emoji">${c.icon}</div><b>${catName(c)}</b><span>${catDesc(c)}</span>
       </button>`).join("")}
     </div>
-    <div class="section"><div class="list-card">${sjEntryRow()}${dirEntryRow()}</div></div>
+    <div class="section"><div class="list-card">${shopEntryRow()}${sjEntryRow()}${dirEntryRow()}</div></div>
     <div class="section">
       <h3>${t("news")}</h3>
       <div class="list-card">
@@ -3420,6 +3439,7 @@ function viewMy() {
         <button class="row" data-act="goto" data-id="register"><div class="ico">🛂</div><div class="meta"><b>${t("scanTitle")}</b><span>${t("editRescan")}</span></div><span class="chev">›</span></button>
         ${sjEntryRow()}
         ${rowBtn({ act: "directory", ico: "📇", title: `${t("dirTitle")} <span class="beta">${t("beta")}</span>`, sub: `★ ${state.dirFav.length} · ${esc(tf("dirCount", { n: DIRECTORY.length }))}`, cls: "row-dir" })}
+        ${rowBtn({ act: "shop-orders", ico: "🧾", title: t("shopOrders"), sub: esc(tf("shopOrdersSub", { n: state.orders.length })) })}
         <button class="row" data-act="tab" data-id="help"><div class="ico">📋</div><div class="meta"><b>${t("myRequests")}</b><span>${tf("reqCount", { n: state.requests.length })}</span></div><span class="chev">›</span></button>
         <button class="row" data-act="logout"><div class="ico">🚪</div><div class="meta"><b>${t("logout")}</b><span>${t("logoutDesc")}</span></div></button>
       </div>
@@ -3597,6 +3617,276 @@ const SCREENS = {
   directory: () => viewDirectory(), "dir-list": () => viewDirList(), "dir-detail": () => viewDirDetail(),
   emergency: () => viewEmergency(), "emergency-call": () => viewEmgCall(), "emg-info": () => viewEmgInfo(),
 };
+// ---------- 구매/신청 (도시락 · 선불폰 · 보험 상담 · 서류 발급 대행) ----------
+// Orders are kept on the device (localStorage mpg_orders). No payment is taken in the app:
+// the customer pays on delivery / by transfer after the order is confirmed. Prices are illustrative.
+const SHOP_KEY = "mpg_orders";
+Object.assign(I18N.ko, {
+  shopTitle: "구매/신청", shopSub: "도시락 · 선불폰 · 보험 · 서류대행", shopOrders: "내 주문/신청",
+  shopOrdersSub: "{n}건", shopNoOrders: "아직 주문/신청 내역이 없습니다.",
+  shopOrder: "주문하기", shopApply: "신청하기", shopQty: "수량", shopDate: "받을 날짜", shopTime: "받을 시간",
+  shopPlace: "받을 곳 (사업장 / 주소)", shopPhone: "연락처", shopMemo: "요청 사항", shopMemoPh: "예: 맵지 않게, 숙소 앞에 놓아주세요",
+  shopNext: "다음", shopCheckout: "주문 확인", shopPay: "결제 방법", shopTotal: "합계",
+  shopConfirm: "주문 확정", shopConfirmApply: "신청 확정", shopDone: "주문이 접수되었습니다", shopDoneApply: "신청이 접수되었습니다",
+  shopDoneSub: "진행 상황은 '내 주문/신청'에서 확인할 수 있습니다.", shopNo: "주문 번호", shopSeeOrders: "내 주문/신청 보기", shopHome: "홈으로",
+  stReceived: "접수됨", stProcessing: "처리중", stDone: "완료", shopStatus: "진행 상태", shopItem: "상품", shopAt: "주문 시각",
+  shopConsult: "상담 후 안내", shopPurpose: "용도", shopPurposePh: "예: 비자 연장, 은행 계좌 개설",
+  shopNeedDocs: "준비물", shopContactTime: "상담 받을 시간", shopName: "이름",
+  payOnDelivery: "받을 때 결제 (현금/카드)", payTransfer: "계좌 이체 (주문 후 계좌 안내)", payAfterConsult: "상담 후 비용 안내",
+  shopReq: "을(를) 입력해 주세요", won: "원",
+});
+Object.assign(I18N.en, {
+  shopTitle: "Shop & Services", shopSub: "Lunch box · Prepaid phone · Insurance · Documents", shopOrders: "My orders",
+  shopOrdersSub: "{n} orders", shopNoOrders: "No orders or applications yet.",
+  shopOrder: "Order", shopApply: "Apply", shopQty: "Quantity", shopDate: "Delivery date", shopTime: "Delivery time",
+  shopPlace: "Deliver to (workplace / address)", shopPhone: "Phone", shopMemo: "Requests", shopMemoPh: "e.g. not spicy, leave at the dormitory door",
+  shopNext: "Next", shopCheckout: "Review order", shopPay: "Payment", shopTotal: "Total",
+  shopConfirm: "Place order", shopConfirmApply: "Submit application", shopDone: "Your order has been received", shopDoneApply: "Your application has been received",
+  shopDoneSub: "Track progress in 'My orders'.", shopNo: "Order no.", shopSeeOrders: "View my orders", shopHome: "Home",
+  stReceived: "Received", stProcessing: "In progress", stDone: "Completed", shopStatus: "Status", shopItem: "Item", shopAt: "Ordered at",
+  shopConsult: "Quoted after consultation", shopPurpose: "Purpose", shopPurposePh: "e.g. visa extension, opening a bank account",
+  shopNeedDocs: "You will need", shopContactTime: "Preferred call time", shopName: "Name",
+  payOnDelivery: "Pay on delivery (cash/card)", payTransfer: "Bank transfer (account sent after ordering)", payAfterConsult: "Cost explained after consultation",
+  shopReq: " is required", won: "KRW",
+});
+Object.assign(I18N.si, {
+  shopTitle: "මිලදී ගැනීම් සහ සේවා", shopOrders: "මගේ ඇණවුම්", shopOrder: "ඇණවුම් කරන්න", shopApply: "අයදුම් කරන්න",
+  shopNext: "ඊළඟ", shopTotal: "එකතුව", stReceived: "ලැබුණි", stProcessing: "සකසමින්", stDone: "සම්පූර්ණයි", shopHome: "මුල් පිටුව",
+});
+const sx = (o) => (o && (o[state.lang] || (state.lang !== "ko" && o.en) || o.ko)) || "";
+const SHOP = [
+  { id: "lunch", icon: "🍱", kind: "order", name: { ko: "도시락 주문 (점심)", en: "Lunch box order", si: "දිවා ආහාර පෙට්ටි" },
+    desc: { ko: "일터·숙소로 점심 도시락 배달", en: "Lunch boxes delivered to your workplace or dorm" }, fields: ["qty", "date", "time", "place", "phone", "memo"], pay: ["payOnDelivery", "payTransfer"],
+    items: [
+      { id: "l1", icon: "🍛", price: 8000, name: { ko: "치킨 커리 도시락", en: "Chicken curry box" }, desc: { ko: "닭고기 커리, 밥, 달걀, 채소 반찬", en: "Chicken curry, rice, egg and vegetable sides" } },
+      { id: "l2", icon: "🥘", price: 7000, name: { ko: "채식 커리 도시락", en: "Vegetable curry box" }, desc: { ko: "렌틸콩(달) 커리, 밥, 채소 반찬 · 고기 없음", en: "Lentil (dhal) curry, rice, vegetable sides · no meat" } },
+      { id: "l3", icon: "🍚", price: 7500, name: { ko: "생선 커리 도시락", en: "Fish curry box" }, desc: { ko: "생선 커리, 밥, 코코넛 삼볼", en: "Fish curry, rice, coconut sambol" } },
+      { id: "l4", icon: "🥗", price: 6500, name: { ko: "한식 도시락", en: "Korean lunch box" }, desc: { ko: "밥, 국, 불고기, 반찬 3가지 · 돼지고기 없음", en: "Rice, soup, beef bulgogi, 3 sides · no pork" } },
+    ] },
+  { id: "phone", icon: "📱", kind: "order", name: { ko: "선불폰", en: "Prepaid phone", si: "පෙරගෙවුම් දුරකථන" },
+    desc: { ko: "선불 유심 개통·충전", en: "Prepaid SIM activation and top-up" }, fields: ["qty", "place", "phone", "memo"], pay: ["payOnDelivery", "payTransfer"],
+    items: [
+      { id: "p1", icon: "📶", price: 33000, name: { ko: "선불 유심 30일 · 데이터 10GB", en: "Prepaid SIM 30 days · 10GB data" }, desc: { ko: "통화·문자 포함, 여권/외국인등록증으로 개통", en: "Calls and texts included; activated with passport or residence card" } },
+      { id: "p2", icon: "📞", price: 15000, name: { ko: "선불 유심 30일 · 기본", en: "Prepaid SIM 30 days · basic" }, desc: { ko: "통화·문자 중심, 데이터 1GB", en: "Mainly calls and texts, 1GB data" } },
+      { id: "p3", icon: "🔋", price: 10000, name: { ko: "선불 충전 10,000원", en: "Top-up 10,000 KRW" }, desc: { ko: "사용 중인 선불폰 번호에 충전", en: "Top-up for your existing prepaid number" } },
+      { id: "p4", icon: "🔋", price: 30000, name: { ko: "선불 충전 30,000원", en: "Top-up 30,000 KRW" }, desc: { ko: "사용 중인 선불폰 번호에 충전", en: "Top-up for your existing prepaid number" } },
+    ] },
+  { id: "insurance", icon: "🛡️", kind: "apply", name: { ko: "보험 (상담 신청)", en: "Insurance (consultation)", si: "රක්ෂණ" },
+    desc: { ko: "상해·질병·귀국비용 보험 상담", en: "Accident, illness and return-cost insurance consultation" }, fields: ["phone", "time", "memo"], pay: ["payAfterConsult"],
+    items: [
+      { id: "i1", icon: "🩹", name: { ko: "상해보험 상담", en: "Accident insurance consultation" }, desc: { ko: "일하다가 또는 일상에서 다쳤을 때를 대비하는 보험 상담", en: "Consultation on cover for injuries at work or in daily life" } },
+      { id: "i2", icon: "🏥", name: { ko: "질병·의료비 보험 상담", en: "Illness / medical cost insurance consultation" }, desc: { ko: "병원비 부담을 줄이는 보험 상담", en: "Consultation on insurance that reduces hospital costs" } },
+      { id: "i3", icon: "✈️", name: { ko: "귀국비용보험 상담", en: "Return-cost insurance consultation" }, desc: { ko: "귀국 항공권 비용을 대비하는 보험 상담", en: "Consultation on insurance for your return flight costs" } },
+    ] },
+  { id: "docs", icon: "📄", kind: "apply", name: { ko: "기타서류대행", en: "Document issuance service", si: "ලේඛන සේවා" },
+    desc: { ko: "행정 서류 발급 대행", en: "We obtain administrative documents for you" }, fields: ["qty", "purpose", "place", "phone", "memo"], pay: ["payOnDelivery", "payTransfer"],
+    need: { ko: "위임장(앱에서 작성 안내), 여권 또는 외국인등록증 사본", en: "Power of attorney (we guide you), copy of passport or residence card" },
+    items: [
+      { id: "d1", icon: "🪪", price: 5000, name: { ko: "외국인등록사실증명", en: "Certificate of Alien Registration" }, desc: { ko: "외국인등록 사실을 증명하는 서류", en: "Proves your alien registration" } },
+      { id: "d2", icon: "🛬", price: 5000, name: { ko: "출입국에 관한 사실증명", en: "Certificate of Entry & Exit" }, desc: { ko: "한국 입국·출국 기록 증명", en: "Record of your entries to and exits from Korea" } },
+      { id: "d3", icon: "🏥", price: 5000, name: { ko: "건강보험 자격득실 확인서", en: "Health insurance eligibility certificate" }, desc: { ko: "건강보험 가입·상실 이력 확인", en: "History of your national health insurance coverage" } },
+      { id: "d4", icon: "💰", price: 5000, name: { ko: "소득금액증명", en: "Certificate of Income Amount" }, desc: { ko: "세무서에 신고된 소득 증명", en: "Income reported to the tax office" } },
+      { id: "d5", icon: "🧾", price: 5000, name: { ko: "납세증명서", en: "Tax Payment Certificate" }, desc: { ko: "체납 세금이 없음을 증명", en: "Proves you have no unpaid taxes" } },
+    ] },
+];
+state.orders = (() => { try { const v = JSON.parse(safeGet(SHOP_KEY, "[]")); return Array.isArray(v) ? v : []; } catch (e) { return []; } })();
+state.shopCat = "lunch"; state.shopItem = "l1"; state.shopDraft = null; state.shopOrderNo = null;
+NAV_KEYS.push("shopCat", "shopItem", "shopOrderNo");
+function saveOrders() { safeSet(SHOP_KEY, JSON.stringify(state.orders)); }
+const shopCatOf = (id) => SHOP.find((c) => c.id === id) || SHOP[0];
+const shopItemOf = (c, id) => c.items.find((i) => i.id === id) || c.items[0];
+const won = (n) => state.lang === "ko" ? `${Number(n).toLocaleString("ko-KR")}원` : `${Number(n).toLocaleString("en-US")} KRW`;
+// Status follows time since the order (a real back office would set it): 접수됨 → 처리중 → 완료.
+function orderStatus(o, now = Date.now()) {
+  const m = (now - o.ts) / 60000;
+  return m < 10 ? "received" : m < 60 * 3 ? "processing" : "done";
+}
+const ST_KEY = { received: "stReceived", processing: "stProcessing", done: "stDone" };
+function stBadge(s) { return `<span class="st-badge st-${s}">${t(ST_KEY[s])}</span>`; }
+function shopEntryRow() {
+  return rowBtn({ act: "shop", ico: "🛒", title: t("shopTitle"), sub: t("shopSub"), cls: "row-shop" });
+}
+function viewShop() {
+  return `${topbar(t("shopTitle"), true)}
+  <div class="screen">
+    <div class="section"><div class="list-card shop-cats">
+      ${SHOP.map((c) => rowBtn({ act: "shop-cat", id: c.id, ico: c.icon, title: esc(sx(c.name)), sub: esc(sx(c.desc)) })).join("")}
+    </div></div>
+    <div class="section"><div class="list-card">
+      ${rowBtn({ act: "shop-orders", ico: "🧾", title: t("shopOrders"), sub: esc(tf("shopOrdersSub", { n: state.orders.length })) })}
+    </div></div>
+  </div>${tabbar()}`;
+}
+function viewShopList() {
+  const c = shopCatOf(state.shopCat);
+  return `${topbar(`${c.icon} ${esc(sx(c.name))}`, true)}
+  <div class="screen">
+    <div class="section"><div class="list-card shop-items">
+      ${c.items.map((i) => rowBtn({ act: "shop-item", id: i.id, ico: i.icon, title: esc(sx(i.name)), sub: i.price ? won(i.price) : t("shopConsult") })).join("")}
+    </div></div>
+  </div>${tabbar()}`;
+}
+function viewShopItem() {
+  const c = shopCatOf(state.shopCat), i = shopItemOf(c, state.shopItem);
+  return `${topbar(`${c.icon} ${esc(sx(c.name))}`, true)}
+  <div class="screen">
+    <div class="pad shop-detail">
+      <div class="shop-hero">${i.icon}</div>
+      <h2 class="d-title">${esc(sx(i.name))}</h2>
+      <div class="shop-price">${i.price ? won(i.price) : t("shopConsult")}</div>
+      <p class="d-body mt8">${esc(sx(i.desc))}</p>
+      ${c.need ? `<div class="list-card d-info mt16"><div class="d-row"><span class="d-k">${t("shopNeedDocs")}</span><span class="d-v">${esc(sx(c.need))}</span></div></div>` : ""}
+      <button class="btn btn-orange mt16" data-act="shop-form">${c.kind === "apply" ? t("shopApply") : t("shopOrder")}</button>
+    </div>
+  </div>${tabbar()}`;
+}
+function shopDefaultDate() { const d = new Date(Date.now() + 86400000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function viewShopForm() {
+  const c = shopCatOf(state.shopCat), i = shopItemOf(c, state.shopItem), u = state.user || {};
+  const d = state.shopDraft || {};
+  const f = {
+    qty: `<div class="field"><label>${t("shopQty")}</label><div class="qty"><button type="button" data-act="shop-qty" data-id="-1">−</button><input name="qty" id="shopQty" inputmode="numeric" value="${esc(d.qty || 1)}" readonly /><button type="button" data-act="shop-qty" data-id="1">+</button></div></div>`,
+    date: `<div class="field"><label>${t("shopDate")}</label><input type="date" name="date" value="${esc(d.date || shopDefaultDate())}" /></div>`,
+    time: `<div class="field"><label>${c.id === "insurance" ? t("shopContactTime") : t("shopTime")}</label><select name="time">${["11:30", "12:00", "12:30", "18:00", "19:00"].map((x) => `<option ${d.time === x ? "selected" : ""}>${x}</option>`).join("")}</select></div>`,
+    place: `<div class="field"><label>${t("shopPlace")}</label><input name="place" value="${esc(d.place ?? (u.workplace || ""))}" /></div>`,
+    phone: `<div class="field"><label>${t("shopPhone")}</label><input name="phone" inputmode="tel" value="${esc(d.phone ?? (u.phone || ""))}" /></div>`,
+    purpose: `<div class="field"><label>${t("shopPurpose")}</label><input name="purpose" value="${esc(d.purpose || "")}" placeholder="${t("shopPurposePh")}" /></div>`,
+    memo: `<div class="field"><label>${t("shopMemo")}</label><textarea name="memo" placeholder="${c.id === "lunch" ? t("shopMemoPh") : ""}">${esc(d.memo || "")}</textarea></div>`,
+  };
+  return `${topbar(c.kind === "apply" ? t("shopApply") : t("shopOrder"), true)}
+  <div class="screen">
+    <div class="pad" style="padding-bottom:0"><p class="form-head"><span class="tag">${i.icon} ${esc(sx(i.name))}</span> <span class="muted">${i.price ? won(i.price) : t("shopConsult")}</span></p></div>
+    <form class="form" data-form="shop">
+      ${c.fields.map((k) => f[k]).join("")}
+      <button class="btn btn-orange" type="submit">${t("shopNext")}</button>
+    </form>
+  </div>${tabbar()}`;
+}
+function shopTotal(c, i, d) { return i.price ? i.price * (c.fields.includes("qty") ? Math.max(1, Number(d.qty) || 1) : 1) : 0; }
+function viewShopCheckout() {
+  const c = shopCatOf(state.shopCat), i = shopItemOf(c, state.shopItem), d = state.shopDraft || {};
+  const rows = [
+    [t("shopItem"), esc(sx(i.name))],
+    c.fields.includes("qty") ? [t("shopQty"), esc(d.qty || 1)] : null,
+    d.purpose ? [t("shopPurpose"), esc(d.purpose)] : null,
+    d.date ? [t("shopDate"), esc(d.date)] : null,
+    d.time ? [c.id === "insurance" ? t("shopContactTime") : t("shopTime"), esc(d.time)] : null,
+    d.place ? [t("shopPlace"), esc(d.place)] : null,
+    d.phone ? [t("shopPhone"), esc(d.phone)] : null,
+    d.memo ? [t("shopMemo"), esc(d.memo)] : null,
+  ].filter(Boolean);
+  const total = shopTotal(c, i, d);
+  const pay = d.pay || c.pay[0];
+  return `${topbar(t("shopCheckout"), true)}
+  <div class="screen">
+    <div class="pad">
+      <div class="list-card d-info">${rows.map(([k, v]) => `<div class="d-row"><span class="d-k">${k}</span><span class="d-v">${v}</span></div>`).join("")}
+        <div class="d-row shop-total"><span class="d-k">${t("shopTotal")}</span><span class="d-v"><b>${total ? won(total) : t("shopConsult")}</b></span></div></div>
+      <h3 class="sub-h">${t("shopPay")}</h3>
+      <div class="chip-row shop-pay">${c.pay.map((p) => `<button type="button" class="chip ${p === pay ? "on" : ""}" data-act="shop-pay" data-id="${p}">${t(p)}</button>`).join("")}</div>
+      <button class="btn btn-orange mt16" data-act="shop-confirm">${c.kind === "apply" ? t("shopConfirmApply") : t("shopConfirm")}</button>
+    </div>
+  </div>${tabbar()}`;
+}
+function viewShopDone() {
+  const o = state.orders.find((x) => x.no === state.shopOrderNo) || state.orders[0];
+  const c = shopCatOf(o && o.cat);
+  return `${topbar(c.kind === "apply" ? t("shopConfirmApply") : t("shopConfirm"), false)}
+  <div class="screen">
+    <div class="pad shop-done">
+      <div class="shop-hero">✅</div>
+      <h2 class="d-title">${c.kind === "apply" ? t("shopDoneApply") : t("shopDone")}</h2>
+      <p class="muted">${t("shopDoneSub")}</p>
+      <div class="list-card d-info mt16">
+        <div class="d-row"><span class="d-k">${t("shopNo")}</span><span class="d-v"><b>${esc(o && o.no)}</b></span></div>
+        <div class="d-row"><span class="d-k">${t("shopItem")}</span><span class="d-v">${esc(o && sx(shopItemOf(c, o.item).name))}</span></div>
+        <div class="d-row"><span class="d-k">${t("shopStatus")}</span><span class="d-v">${stBadge("received")}</span></div>
+      </div>
+      <button class="btn btn-orange mt16" data-act="shop-orders">${t("shopSeeOrders")}</button>
+      <button class="btn btn-white mt8" data-act="home">${t("shopHome")}</button>
+    </div>
+  </div>${tabbar()}`;
+}
+function viewShopOrders() {
+  const list = state.orders;
+  return `${topbar(t("shopOrders"), true)}
+  <div class="screen">
+    <div class="section">${list.length ? `<div class="list-card shop-orders">${list.map((o) => {
+      const c = shopCatOf(o.cat), i = shopItemOf(c, o.item);
+      return rowBtn({ act: "shop-order", id: o.no, ico: c.icon, title: `${esc(sx(i.name))} ${stBadge(orderStatus(o))}`, sub: esc(`${o.no} · ${o.total ? won(o.total) : t("shopConsult")}`) });
+    }).join("")}</div>` : `<div class="dir-empty">${t("shopNoOrders")}</div>`}</div>
+  </div>${tabbar()}`;
+}
+function viewShopOrder() {
+  const o = state.orders.find((x) => x.no === state.shopOrderNo) || state.orders[0];
+  if (!o) return viewShopOrders();
+  const c = shopCatOf(o.cat), i = shopItemOf(c, o.item), s = orderStatus(o);
+  const steps = ["received", "processing", "done"], cur = steps.indexOf(s);
+  const d = o.data || {};
+  const rows = [
+    [t("shopNo"), esc(o.no)], [t("shopItem"), esc(sx(i.name))],
+    d.qty && c.fields.includes("qty") ? [t("shopQty"), esc(d.qty)] : null,
+    d.date ? [t("shopDate"), esc(d.date)] : null, d.time ? [c.id === "insurance" ? t("shopContactTime") : t("shopTime"), esc(d.time)] : null,
+    d.place ? [t("shopPlace"), esc(d.place)] : null, [t("shopPay"), esc(t(o.pay))],
+    [t("shopTotal"), o.total ? won(o.total) : t("shopConsult")], [t("shopAt"), esc(new Date(o.ts).toLocaleString(state.lang === "ko" ? "ko-KR" : "en-GB"))],
+  ].filter(Boolean);
+  return `${topbar(t("shopOrders"), true)}
+  <div class="screen">
+    <div class="pad">
+      <h2 class="d-title">${c.icon} ${esc(sx(i.name))}</h2>
+      <div class="st-line mt16">${steps.map((k, n) => `<div class="st-step ${n <= cur ? "on" : ""}"><span class="st-dot">${n < cur ? "✓" : n + 1}</span><span>${t(ST_KEY[k])}</span></div>`).join("")}</div>
+      <div class="list-card d-info mt16">${rows.map(([k, v]) => `<div class="d-row"><span class="d-k">${k}</span><span class="d-v">${v}</span></div>`).join("")}</div>
+    </div>
+  </div>${tabbar()}`;
+}
+function shopClick(act, id) {
+  if (act === "shop") { push("shop", { tab: "home" }); return true; }
+  if (act === "shop-cat") { push("shop-list", { shopCat: id }); return true; }
+  if (act === "shop-item") { push("shop-item", { shopItem: id }); return true; }
+  if (act === "shop-form") { state.shopDraft = null; push("shop-form"); return true; }
+  if (act === "shop-qty") {
+    const el = $("#shopQty"); if (el) el.value = Math.max(1, Math.min(50, (Number(el.value) || 1) + Number(id)));
+    return true;
+  }
+  if (act === "shop-pay") { state.shopDraft = { ...(state.shopDraft || {}), pay: id }; render(); return true; }
+  if (act === "shop-confirm") {
+    const c = shopCatOf(state.shopCat), i = shopItemOf(c, state.shopItem), d = state.shopDraft || {};
+    const now = new Date();
+    const no = `MP${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+    const { pay, ...data } = d;
+    state.orders.unshift({ no, cat: c.id, item: i.id, data, pay: pay || c.pay[0], total: shopTotal(c, i, d), ts: now.getTime() });
+    saveOrders();
+    // the confirmation replaces form + checkout in history: back goes to the item list
+    state.nav.pop(); state.nav.pop();
+    replaceScreen("shop-done", { shopOrderNo: no });
+    return true;
+  }
+  if (act === "shop-orders") {
+    if (state.screen === "shop-done") { // back from the history goes to the 구매/신청 list
+      state.nav = [{ ...Object.fromEntries(NAV_KEYS.map((k) => [k, clone(state[k])])), screen: "app", tab: "home" }, { ...Object.fromEntries(NAV_KEYS.map((k) => [k, clone(state[k])])), screen: "shop", tab: "home" }];
+      replaceScreen("shop-orders"); return true;
+    }
+    push("shop-orders"); return true;
+  }
+  if (act === "shop-order") { push("shop-order", { shopOrderNo: id }); return true; }
+  return false;
+}
+function shopSubmit(form, data) {
+  if (form.dataset.form !== "shop") return false;
+  const c = shopCatOf(state.shopCat);
+  const need = { place: "shopPlace", phone: "shopPhone", purpose: "shopPurpose" };
+  for (const k of Object.keys(need)) {
+    if (c.fields.includes(k) && !String(data[k] || "").trim()) { toast(`${t(need[k])}${t("shopReq")}`); form.querySelector(`[name="${k}"]`)?.focus(); return true; }
+  }
+  state.shopDraft = { ...data, pay: (state.shopDraft && state.shopDraft.pay) || c.pay[0] };
+  push("shop-checkout");
+  return true;
+}
+Object.assign(SCREENS, {
+  shop: () => viewShop(), "shop-list": () => viewShopList(), "shop-item": () => viewShopItem(), "shop-form": () => viewShopForm(),
+  "shop-checkout": () => viewShopCheckout(), "shop-done": () => viewShopDone(), "shop-orders": () => viewShopOrders(), "shop-order": () => viewShopOrder(),
+});
+
 function currentView() {
   if (!state.screen) return viewSplash();
   if (SCREENS[state.screen]) return SCREENS[state.screen]();
@@ -3630,6 +3920,7 @@ function onClick(e) {
   if (!btn) return;
   const act = btn.dataset.act;
   const id = btn.dataset.id;
+  if (shopClick(act, id)) return;
   if (act === "lang") {
     state.lang = id;
     safeSet("mpg_lang", id);
@@ -3827,6 +4118,7 @@ function onSubmit(e) {
   if (!form) return;
   e.preventDefault();
   const data = Object.fromEntries(new FormData(form).entries());
+  if (shopSubmit(form, data)) return;
   if (form.dataset.form === "register") {
     resetNav();
     state.user = { ...state.form, ...data, photo: state.passportImage || "" };
